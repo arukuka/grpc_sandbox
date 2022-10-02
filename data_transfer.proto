@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package sandbox;
+
+import "google/protobuf/empty.proto";
+
+service Transfer {
+    rpc Start(google.protobuf.Empty) returns(google.protobuf.Empty) {}
+    rpc Send(Value) returns(google.protobuf.Empty) {}
+    rpc SendClientStream(stream Values) returns(google.protobuf.Empty) {}
+    rpc SendV2(ValueV2) returns(google.protobuf.Empty) {}
+    rpc SendClientStreamV2(stream ValuesV2) returns(google.protobuf.Empty) {}
+}
+
+message Value {
+    string value = 1;
+    int32 id = 2;
+}
+
+message Values {
+    repeated Value values = 1;
+}
+
+message ValueV2 {
+    bytes value = 1;
+    int32 id = 2;
+}
+
+message ValuesV2 {
+    repeated ValueV2 values = 1;
+}

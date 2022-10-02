@@ -1,0 +1,1 @@
+build --strip=never --cxxopt=-std=c++17 --cxxopt=-O2 --cxxopt=-g
