@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -10,17 +11,29 @@
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/utility.hpp>
 #include <boost/serialization/vector.hpp>
+#include <boost/program_options.hpp>
 
-int main(const int argc, const char** argv)
+int main(const int ac, const char* const* const av)
 {
+  boost::program_options::options_description description;
+
+  // clang-format off
+  description.add_options()
+      ("seed", "")
+      ("size", boost::program_options::value<std::size_t>()->default_value(1000000), "")
+      ("help,h", "")
+      ;
+  // clang-format on
+
+  boost::program_options::variables_map vm;
+  store(parse_command_line(ac, av, description), vm);
+  notify(vm);
+
   const auto seed = [&]()
   {
-    if (argc >= 2)
+    if (vm.count("seed"))
     {
-      std::istringstream iss(argv[1]);
-      unsigned int seed;
-      iss >> seed;
-      return seed;
+      return vm["seed"].as<unsigned int>();
     }
     else
     {
@@ -28,6 +41,8 @@ int main(const int argc, const char** argv)
       return seed_gen();
     }
   }();
+  const std::size_t size = vm["size"].as<std::size_t>();
+
   std::mt19937 engine(seed);
 
   std::uniform_int_distribution<std::int64_t> dist(
@@ -36,7 +51,7 @@ int main(const int argc, const char** argv)
   );
 
   std::vector<std::pair<int, boost::multiprecision::cpp_int>> data;
-  for (int i = 0; i < 1000000; ++i)
+  for (std::size_t i = 0; i < size; ++i)
   {
     data.emplace_back(
         std::make_pair(i, boost::multiprecision::cpp_int(dist(engine)))

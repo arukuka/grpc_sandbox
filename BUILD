@@ -64,6 +64,7 @@ cc_binary(
     deps = [
         "@boost//:serialization",
         "@boost//:multiprecision",
+        "@boost//:program_options",
     ],
 )
 
