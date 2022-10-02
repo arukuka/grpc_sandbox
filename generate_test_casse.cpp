@@ -12,6 +12,8 @@
 #include <boost/serialization/utility.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/program_options.hpp>
+#include <indicators/block_progress_bar.hpp>
+#include <indicators/setting.hpp>
 
 int main(const int ac, const char* const* const av)
 {
@@ -50,12 +52,20 @@ int main(const int ac, const char* const* const av)
       std::numeric_limits<std::int64_t>::max()
   );
 
+  indicators::BlockProgressBar bar{
+      indicators::option::BarWidth{80},
+      indicators::option::ShowElapsedTime{true},
+      indicators::option::ShowRemainingTime{true},
+      indicators::option::MaxProgress{size}
+  };
+
   std::vector<std::pair<int, boost::multiprecision::cpp_int>> data;
   for (std::size_t i = 0; i < size; ++i)
   {
     data.emplace_back(
         std::make_pair(i, boost::multiprecision::cpp_int(dist(engine)))
     );
+    bar.tick();
   }
 
   {

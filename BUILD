@@ -65,6 +65,7 @@ cc_binary(
         "@boost//:serialization",
         "@boost//:multiprecision",
         "@boost//:program_options",
+        ":indicators",
     ],
 )
 
