@@ -194,13 +194,132 @@ void send_by_stream(
   }
 }
 
+using input_type = std::vector<std::pair<int, boost::multiprecision::cpp_int>>;
+
+std::vector<std::pair<input_type::const_iterator, input_type::const_iterator>> split(const input_type& input, const unsigned int threads = std::thread::hardware_concurrency())
+{
+  if (threads == 0)
+  {
+    throw std::invalid_argument("");
+  }
+  std::vector<std::pair<input_type::const_iterator, input_type::const_iterator>> ret;
+
+  const std::size_t width = input.size() / threads;
+  for (unsigned int i = 0; i < threads; ++i)
+  {
+    const input_type::const_iterator from = std::next(input.cbegin(), i * width);
+    const std::size_t step = std::min(input.size(), (i + 1) * width);
+    const input_type::const_iterator to = std::next(input.cbegin(), step);
+
+    ret.emplace_back(std::make_pair(from, to));
+  }
+
+  return ret;
+}
+
+template <Version VERSION = Version::V1>
+void send_by_stream_threads(
+    std::shared_ptr<grpc::Channel> channel,
+    const std::vector<std::pair<int, boost::multiprecision::cpp_int>>& input,
+    const int buffer_size = 1
+)
+{
+  std::cerr << std::thread::hardware_concurrency() << std::endl;
+  boost::asio::thread_pool pool(std::thread::hardware_concurrency());
+
+  int index = 0;
+  for (const auto& [_from, _to] : split(input))
+  {
+    input_type::const_iterator from = _from;
+    input_type::const_iterator to = _to;
+    boost::asio::post(pool, [from, to, channel, buffer_size, index](){
+      auto stub = sandbox::Transfer::NewStub(channel);
+      grpc::ClientContext context;
+      google::protobuf::Empty res;
+      std::shared_ptr<grpc::ClientWriter<typename values_type<VERSION>::type>>
+          stream(
+              [&]()
+              {
+                if constexpr (VERSION == Version::V1)
+                {
+                  return std::move(stub->SendClientStream(&context, &res));
+                }
+                else if constexpr (VERSION == Version::V2)
+                {
+                  return std::move(stub->SendClientStreamV2(&context, &res));
+                }
+              }()
+          );
+
+      typename values_type<VERSION>::type req{};
+      int count = 0;
+      for (auto ite = from; ite != to; ite = std::next(ite))
+      {
+        const auto& kv = *ite;
+        auto values = req.add_values();
+        typename value_type<VERSION>::type one;
+
+        one.set_id(kv.first);
+
+        if constexpr (VERSION == Version::V1)
+        {
+          one.set_value(kv.second.str());
+        }
+        else if constexpr (VERSION == Version::V2)
+        {
+          std::stringstream oss;
+          {
+            boost::archive::binary_oarchive ar(oss);
+            ar << kv.second;
+          }
+
+          one.set_value(oss.str());
+        }
+
+        *values = one;
+
+        if (++count >= buffer_size)
+        {
+          stream->Write(req);
+          req = typename values_type<VERSION>::type();
+          count = 0;
+        }
+      }
+
+      if (req.values_size() > 0)
+      {
+        stream->Write(req);
+      }
+
+      stream->WritesDone();
+
+      const grpc::Status status = stream->Finish();
+
+      if (!status.ok())
+      {
+        std::cerr << (boost::format("%d %s") % status.error_code() %
+                      status.error_message())
+                  << std::endl;
+        std::abort();
+      }
+      std::cout << "[" << index << "] " << status.error_code() << std::endl;
+    });
+    ++index;
+  }
+
+  pool.join();
+}
+
 int main(const int ac, const char* const* const av)
 {
   boost::program_options::options_description description;
 
-  description.add_options()(
-      "method,m", boost::program_options::value<int>()->default_value(0), ""
-  )("help,h", "")("size,s", boost::program_options::value<int>()->default_value(1000), "");
+  // clang-format off
+  description.add_options()
+    ("method,m", boost::program_options::value<int>()->default_value(0), "")
+    ("help,h", "")
+    ("size,s", boost::program_options::value<int>()->default_value(1000), "");
+  // clang-format on
   boost::program_options::variables_map vm;
   store(parse_command_line(ac, av, description), vm);
   notify(vm);
