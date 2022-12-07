@@ -249,8 +249,23 @@ int main()
       }
   );
 
+
+  std::thread progress(
+      [&]
+      {
+        std::unique_lock<std::mutex> lk(mtx);
+        while (!cond.wait_for(lk, std::chrono::seconds(5), [] { return finished; }))
+        {
+          std::cerr << "count: " << count << std::endl;
+        }
+
+        std::cerr << "count: " << count << std::endl;
+      }
+  );
+
   listener->Wait();
   thread.join();
+  progress.join();
 
   return 0;
 }
