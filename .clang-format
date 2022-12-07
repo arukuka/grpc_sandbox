@@ -8,3 +8,4 @@ BinPackArguments: false
 BreakConstructorInitializers: BeforeComma
 IndentAccessModifiers: false
 AccessModifierOffset: -2
+IncludeBlocks: Preserve

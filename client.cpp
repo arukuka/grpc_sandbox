@@ -3,21 +3,28 @@
 #include <grpcpp/support/status.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include <memory>
+#include <sstream>
+#include <stdexcept>
+#include <thread>
+
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <boost/format.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/program_options.hpp>
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/utility.hpp>
 #include <boost/serialization/vector.hpp>
-#include <cstdlib>
-#include <fstream>
+
 #include <indicators/block_progress_bar.hpp>
 #include <indicators/cursor_control.hpp>
 #include <indicators/setting.hpp>
-#include <memory>
-#include <sstream>
 
 #include "data_transfer.grpc.pb.h"
 #include "data_transfer.pb.h"
@@ -196,18 +203,24 @@ void send_by_stream(
 
 using input_type = std::vector<std::pair<int, boost::multiprecision::cpp_int>>;
 
-std::vector<std::pair<input_type::const_iterator, input_type::const_iterator>> split(const input_type& input, const unsigned int threads = std::thread::hardware_concurrency())
+std::vector<std::pair<input_type::const_iterator, input_type::const_iterator>>
+split(
+    const input_type& input,
+    const unsigned int threads = std::thread::hardware_concurrency()
+)
 {
   if (threads == 0)
   {
     throw std::invalid_argument("");
   }
-  std::vector<std::pair<input_type::const_iterator, input_type::const_iterator>> ret;
+  std::vector<std::pair<input_type::const_iterator, input_type::const_iterator>>
+      ret;
 
   const std::size_t width = input.size() / threads;
   for (unsigned int i = 0; i < threads; ++i)
   {
-    const input_type::const_iterator from = std::next(input.cbegin(), i * width);
+    const input_type::const_iterator from =
+        std::next(input.cbegin(), i * width);
     const std::size_t step = std::min(input.size(), (i + 1) * width);
     const input_type::const_iterator to = std::next(input.cbegin(), step);
 
@@ -232,78 +245,84 @@ void send_by_stream_threads(
   {
     input_type::const_iterator from = _from;
     input_type::const_iterator to = _to;
-    boost::asio::post(pool, [from, to, channel, buffer_size, index](){
-      auto stub = sandbox::Transfer::NewStub(channel);
-      grpc::ClientContext context;
-      google::protobuf::Empty res;
-      std::shared_ptr<grpc::ClientWriter<typename values_type<VERSION>::type>>
-          stream(
-              [&]()
-              {
-                if constexpr (VERSION == Version::V1)
-                {
-                  return std::move(stub->SendClientStream(&context, &res));
-                }
-                else if constexpr (VERSION == Version::V2)
-                {
-                  return std::move(stub->SendClientStreamV2(&context, &res));
-                }
-              }()
-          );
-
-      typename values_type<VERSION>::type req{};
-      int count = 0;
-      for (auto ite = from; ite != to; ite = std::next(ite))
-      {
-        const auto& kv = *ite;
-        auto values = req.add_values();
-        typename value_type<VERSION>::type one;
-
-        one.set_id(kv.first);
-
-        if constexpr (VERSION == Version::V1)
+    boost::asio::post(
+        pool,
+        [from, to, channel, buffer_size, index]()
         {
-          one.set_value(kv.second.str());
-        }
-        else if constexpr (VERSION == Version::V2)
-        {
-          std::stringstream oss;
+          auto stub = sandbox::Transfer::NewStub(channel);
+          grpc::ClientContext context;
+          google::protobuf::Empty res;
+          std::shared_ptr<
+              grpc::ClientWriter<typename values_type<VERSION>::type>>
+              stream(
+                  [&]()
+                  {
+                    if constexpr (VERSION == Version::V1)
+                    {
+                      return std::move(stub->SendClientStream(&context, &res));
+                    }
+                    else if constexpr (VERSION == Version::V2)
+                    {
+                      return std::move(stub->SendClientStreamV2(&context, &res)
+                      );
+                    }
+                  }()
+              );
+
+          typename values_type<VERSION>::type req{};
+          int count = 0;
+          for (auto ite = from; ite != to; ite = std::next(ite))
           {
-            boost::archive::binary_oarchive ar(oss);
-            ar << kv.second;
+            const auto& kv = *ite;
+            auto values = req.add_values();
+            typename value_type<VERSION>::type one;
+
+            one.set_id(kv.first);
+
+            if constexpr (VERSION == Version::V1)
+            {
+              one.set_value(kv.second.str());
+            }
+            else if constexpr (VERSION == Version::V2)
+            {
+              std::stringstream oss;
+              {
+                boost::archive::binary_oarchive ar(oss);
+                ar << kv.second;
+              }
+
+              one.set_value(oss.str());
+            }
+
+            *values = one;
+
+            if (++count >= buffer_size)
+            {
+              stream->Write(req);
+              req = typename values_type<VERSION>::type();
+              count = 0;
+            }
           }
 
-          one.set_value(oss.str());
+          if (req.values_size() > 0)
+          {
+            stream->Write(req);
+          }
+
+          stream->WritesDone();
+
+          const grpc::Status status = stream->Finish();
+
+          if (!status.ok())
+          {
+            std::cerr << (boost::format("%d %s") % status.error_code() %
+                          status.error_message())
+                      << std::endl;
+            std::abort();
+          }
+          std::cout << "[" << index << "] " << status.error_code() << std::endl;
         }
-
-        *values = one;
-
-        if (++count >= buffer_size)
-        {
-          stream->Write(req);
-          req = typename values_type<VERSION>::type();
-          count = 0;
-        }
-      }
-
-      if (req.values_size() > 0)
-      {
-        stream->Write(req);
-      }
-
-      stream->WritesDone();
-
-      const grpc::Status status = stream->Finish();
-
-      if (!status.ok())
-      {
-        std::cerr << (boost::format("%d %s") % status.error_code() %
-                      status.error_message())
-                  << std::endl;
-        std::abort();
-      }
-      std::cout << "[" << index << "] " << status.error_code() << std::endl;
-    });
+    );
     ++index;
   }
 
@@ -376,6 +395,9 @@ int main(const int ac, const char* const* const av)
       break;
     case 2:
       send_by_stream(channel, input, buffer_size);
+      break;
+    case 3:
+      send_by_stream_threads(channel, input, buffer_size);
       break;
     case 10:
       send_one_by_one<Version::V2>(channel, input);
