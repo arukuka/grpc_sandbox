@@ -239,7 +239,11 @@ int main()
         cond.wait(lk, [] { return finished; });
 
         const auto tp = std::chrono::system_clock::now();
-        const auto dur = std::chrono::duration_cast<std::chrono::duration<double>>(tp - start).count();
+        const auto dur =
+            std::chrono::duration_cast<std::chrono::duration<double>>(
+                tp - start
+            )
+                .count();
         std::cout << "elapsed time: " << dur << std::endl;
 
         const bool ok = server.check();
@@ -249,12 +253,13 @@ int main()
       }
   );
 
-
   std::thread progress(
       [&]
       {
         std::unique_lock<std::mutex> lk(mtx);
-        while (!cond.wait_for(lk, std::chrono::seconds(5), [] { return finished; }))
+        while (
+            !cond.wait_for(lk, std::chrono::seconds(5), [] { return finished; })
+        )
         {
           std::cerr << "count: " << count << std::endl;
         }
