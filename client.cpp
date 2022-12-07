@@ -60,10 +60,11 @@ struct values_type<Version::V2>
 
 template <Version VERSION = Version::V1>
 void send_one_by_one(
-    std::unique_ptr<sandbox::Transfer::Stub> stub,
+    std::shared_ptr<grpc::Channel> channel,
     const std::vector<std::pair<int, boost::multiprecision::cpp_int>>& input
 )
 {
+  auto stub = sandbox::Transfer::NewStub(channel);
   indicators::BlockProgressBar bar{
       indicators::option::BarWidth{80},
       indicators::option::ShowElapsedTime{true},
@@ -118,11 +119,12 @@ void send_one_by_one(
 
 template <Version VERSION = Version::V1>
 void send_by_stream(
-    std::unique_ptr<sandbox::Transfer::Stub> stub,
+    std::shared_ptr<grpc::Channel> channel,
     const std::vector<std::pair<int, boost::multiprecision::cpp_int>>& input,
     const int buffer_size = 1
 )
 {
+  auto stub = sandbox::Transfer::NewStub(channel);
   grpc::ClientContext context;
   google::protobuf::Empty res;
   std::shared_ptr<grpc::ClientWriter<typename values_type<VERSION>::type>>
@@ -256,22 +258,22 @@ int main(const int ac, const char* const* const av)
   switch (method)
   {
     case 0:
-      send_one_by_one(std::move(stub), input);
+      send_one_by_one(channel, input);
       break;
     case 1:
-      send_by_stream(std::move(stub), input);
+      send_by_stream(channel, input);
       break;
     case 2:
-      send_by_stream(std::move(stub), input, buffer_size);
+      send_by_stream(channel, input, buffer_size);
       break;
     case 10:
-      send_one_by_one<Version::V2>(std::move(stub), input);
+      send_one_by_one<Version::V2>(channel, input);
       break;
     case 11:
-      send_by_stream<Version::V2>(std::move(stub), input);
+      send_by_stream<Version::V2>(channel, input);
       break;
     case 12:
-      send_by_stream<Version::V2>(std::move(stub), input, buffer_size);
+      send_by_stream<Version::V2>(channel, input, buffer_size);
       break;
     default:
       std::cerr << boost::format("method id: %d is not implemented") % method
