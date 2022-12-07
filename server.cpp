@@ -213,6 +213,7 @@ private:
 
 int main()
 {
+  std::cerr << "loading..." << std::endl;
   std::vector<std::pair<int, boost::multiprecision::cpp_int>> excepted;
   {
     std::ifstream ifs("input.bin");
@@ -229,6 +230,7 @@ int main()
   );
 
   auto listener = builder.BuildAndStart();
+  std::cerr << "loaded" << std::endl;
 
   std::thread thread(
       [&]
