@@ -142,12 +142,6 @@ void send_by_stream(
           }()
       );
 
-  indicators::BlockProgressBar bar{
-      indicators::option::BarWidth{80},
-      indicators::option::ShowElapsedTime{true},
-      indicators::option::ShowRemainingTime{true},
-      indicators::option::MaxProgress{input.size()}};
-
   typename values_type<VERSION>::type req{};
   int count = 0;
   for (const auto& kv : input)
@@ -180,8 +174,6 @@ void send_by_stream(
       req = typename values_type<VERSION>::type();
       count = 0;
     }
-
-    bar.tick();
   }
 
   if (req.values_size() > 0)
