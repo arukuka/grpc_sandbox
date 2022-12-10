@@ -42,6 +42,7 @@ cc_binary(
         "@com_github_grpc_grpc//:grpc++_reflection",
         "@boost//:multiprecision",
         "@boost//:serialization",
+        "@boost//:program_options",
         "@boost//:format",
     ],
 )

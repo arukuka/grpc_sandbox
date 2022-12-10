@@ -21,6 +21,8 @@
 #include <thread>
 #include <utility>
 
+#include <boost/program_options.hpp>
+
 #include "data_transfer.grpc.pb.h"
 #include "data_transfer.pb.h"
 
@@ -35,7 +37,10 @@ class Server final : public sandbox::Transfer::Service
 {
 public:
   Server(const std::vector<std::pair<int, boost::multiprecision::cpp_int>>&
-             excepted)
+             excepted,
+         const int mutex_size)
+         : use_mutex(mutex_size > 0)
+         , mutexes(std::max(1, mutex_size))
   {
     done.resize(excepted.size());
     for (const auto& kv : excepted)
@@ -193,6 +198,21 @@ private:
       );
     }
 
+    std::unique_lock<std::mutex> lock(mutexes[id % mutexes.size()], std::defer_lock);
+
+    if (use_mutex)
+    {
+      lock.lock();
+    }
+
+    if (done[id]) {
+      return grpc::Status(
+          grpc::StatusCode::UNKNOWN,
+          (boost::format("id: %d was already done") % id)
+              .str()
+      );
+    }
+
     done[id] = true;
 
     if (++count >= done.size())
@@ -207,12 +227,33 @@ private:
     return grpc::Status::OK;
   }
 
+  bool use_mutex;
+  std::vector<std::mutex> mutexes;
   std::map<int, boost::multiprecision::cpp_int> dict;
   std::vector<bool> done;
 };
 
-int main()
+int main(const int ac, const char* const* const av)
 {
+  boost::program_options::options_description description;
+
+  // clang-format off
+  description.add_options()
+    ("mutex_size,s", boost::program_options::value<int>()->default_value(1000000), "")
+    ("help,h", "");
+  // clang-format on
+  boost::program_options::variables_map vm;
+  store(parse_command_line(ac, av, description), vm);
+  notify(vm);
+
+  if (vm.count("help"))
+  {
+    std::cout << description << std::endl;
+    return 0;
+  }
+
+  const int mutex_size = vm["mutex_size"].as<int>();
+
   std::cerr << "loading..." << std::endl;
   std::vector<std::pair<int, boost::multiprecision::cpp_int>> excepted;
   {
@@ -221,7 +262,7 @@ int main()
 
     ar >> excepted;
   }
-  Server server(excepted);
+  Server server(excepted, mutex_size);
   grpc::ServerBuilder builder;
 
   builder.RegisterService(&server);
