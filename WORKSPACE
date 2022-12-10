@@ -77,9 +77,9 @@ http_archive(
 
 http_archive(
     name = "com_grail_bazel_compdb",
-    sha256 = "d32835b26dd35aad8fd0ba0d712265df6565a3ad860d39e4c01ad41059ea7eda",
-    urls = ["https://github.com/grailbio/bazel-compilation-database/archive/0.5.2.tar.gz"],
-    strip_prefix = "bazel-compilation-database-0.5.2",
+    sha256 = "a3ff6fe238eec8202270dff75580cba3d604edafb8c3408711e82633c153efa8",
+    urls = ["https://github.com/grailbio/bazel-compilation-database/archive/940cedacdb8a1acbce42093bf67f3a5ca8b265f7.tar.gz"],
+    strip_prefix = "bazel-compilation-database-940cedacdb8a1acbce42093bf67f3a5ca8b265f7",
 )
 
 load("@com_grail_bazel_compdb//:deps.bzl", "bazel_compdb_deps")
