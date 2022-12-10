@@ -53,6 +53,7 @@ cc_binary(
         ":data_transfer_cc_grpc",
         "@com_github_grpc_grpc//:grpc++",
         "@boost//:format",
+        "@boost//:asio",
         "@boost//:program_options",
         ":indicators",
     ],
