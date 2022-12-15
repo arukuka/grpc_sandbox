@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <thread>
 
 #include <boost/archive/binary_iarchive.hpp>
@@ -32,7 +33,8 @@
 enum class Version
 {
   V1,
-  V2
+  V2,
+  V3
 };
 
 template <Version VERSION>
@@ -50,6 +52,12 @@ struct value_type<Version::V2>
   using type = sandbox::ValueV2;
 };
 
+template <>
+struct value_type<Version::V3>
+{
+  using type = sandbox::ValueV3;
+};
+
 template <Version VERSION>
 struct values_type;
 
@@ -63,6 +71,12 @@ template <>
 struct values_type<Version::V2>
 {
   using type = sandbox::ValuesV2;
+};
+
+template <>
+struct values_type<Version::V3>
+{
+  using type = sandbox::ValuesV3;
 };
 
 template <Version VERSION = Version::V1>
@@ -146,6 +160,10 @@ void send_by_stream(
             {
               return std::move(stub->SendClientStreamV2(&context, &res));
             }
+            else if constexpr (VERSION == Version::V3)
+            {
+              return std::move(stub->SendClientStreamV3(&context, &res));
+            }
           }()
       );
 
@@ -171,6 +189,14 @@ void send_by_stream(
       }
 
       one.set_value(oss.str());
+    }
+    else if constexpr (VERSION == Version::V3)
+    {
+      std::string s;
+      boost::multiprecision::export_bits(kv.second, std::back_inserter(s), sizeof(std::string::value_type) * 8);
+
+      one.set_value(s);
+      one.set_negative(kv.second < 0);
     }
 
     *values = one;
@@ -407,6 +433,9 @@ int main(const int ac, const char* const* const av)
       break;
     case 12:
       send_by_stream<Version::V2>(channel, input, buffer_size);
+      break;
+    case 22:
+      send_by_stream<Version::V3>(channel, input, buffer_size);
       break;
     default:
       std::cerr << boost::format("method id: %d is not implemented") % method

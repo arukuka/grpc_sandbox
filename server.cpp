@@ -162,6 +162,45 @@ public:
     return grpc::Status::OK;
   }
 
+
+  grpc::Status SendClientStreamV3(
+      grpc::ServerContext* context,
+      grpc::ServerReader<sandbox::ValuesV3>* request,
+      google::protobuf::Empty* response
+  ) override
+  {
+    sandbox::ValuesV3 values;
+    while (request->Read(&values))
+    {
+      for (int i = 0; i < values.values_size(); ++i)
+      {
+        const auto one = values.values(i);
+        const std::string serialized = one.value();
+        const int id = one.id();
+        const boost::multiprecision::cpp_int value = [&serialized, nagative = one.negative()]()
+        {
+          boost::multiprecision::cpp_int dst;
+
+          boost::multiprecision::import_bits(dst, serialized.begin(), serialized.end(), 8);
+
+          if (nagative) {
+            dst *= -1;
+          }
+
+          return dst;
+        }();
+
+        const auto status = process(id, value);
+
+        if (!status.ok())
+        {
+          return status;
+        }
+      }
+    }
+    return grpc::Status::OK;
+  }
+
   bool check() const
   {
     bool ok = true;

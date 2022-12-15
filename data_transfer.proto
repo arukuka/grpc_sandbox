@@ -10,6 +10,8 @@ service Transfer {
     rpc SendClientStream(stream Values) returns(google.protobuf.Empty) {}
     rpc SendV2(ValueV2) returns(google.protobuf.Empty) {}
     rpc SendClientStreamV2(stream ValuesV2) returns(google.protobuf.Empty) {}
+    rpc SendV3(ValueV3) returns(google.protobuf.Empty) {}
+    rpc SendClientStreamV3(stream ValuesV3) returns(google.protobuf.Empty) {}
 }
 
 message Value {
@@ -28,4 +30,14 @@ message ValueV2 {
 
 message ValuesV2 {
     repeated ValueV2 values = 1;
+}
+
+message ValueV3 {
+    bytes value = 1;
+    bool negative = 2;
+    int32 id = 3;
+}
+
+message ValuesV3 {
+    repeated ValueV3 values = 1;
 }
